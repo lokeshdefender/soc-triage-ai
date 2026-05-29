@@ -1,0 +1,68 @@
+[
+  {
+    "alert_id": "ALT-001",
+    "timestamp": "2025-05-24T08:12:33Z",
+    "source_ip": "192.168.1.45",
+    "destination_ip": "10.0.0.1",
+    "alert_type": "Brute Force Login",
+    "description": "450 failed SSH login attempts in 5 minutes from single source IP",
+    "user_account": "admin",
+    "hostname": "prod-server-01",
+    "log_source": "Linux Auth Logs"
+  },
+  {
+    "alert_id": "ALT-002",
+    "timestamp": "2025-05-24T08:34:11Z",
+    "source_ip": "203.0.113.77",
+    "destination_ip": "10.0.0.55",
+    "alert_type": "Suspicious Outbound Traffic",
+    "description": "Unusual outbound connection to known C2 IP on port 4444",
+    "user_account": "john.doe",
+    "hostname": "workstation-14",
+    "log_source": "Firewall"
+  },
+  {
+    "alert_id": "ALT-003",
+    "timestamp": "2025-05-24T09:01:55Z",
+    "source_ip": "10.0.0.22",
+    "destination_ip": "8.8.8.8",
+    "alert_type": "DNS Query Anomaly",
+    "description": "Endpoint querying 300+ unique subdomains in 60 seconds — possible DNS tunneling",
+    "user_account": "service-account-db",
+    "hostname": "db-server-02",
+    "log_source": "DNS Logs"
+  },
+  {
+    "alert_id": "ALT-004",
+    "timestamp": "2025-05-24T09:22:10Z",
+    "source_ip": "10.0.0.88",
+    "destination_ip": "10.0.0.1",
+    "alert_type": "Privilege Escalation",
+    "description": "User account ran sudo su to root without prior authorization ticket",
+    "user_account": "intern-user",
+    "hostname": "dev-machine-07",
+    "log_source": "Linux Auth Logs"
+  },
+  {
+    "alert_id": "ALT-005",
+    "timestamp": "2025-05-24T10:05:44Z",
+    "source_ip": "10.0.0.5",
+    "destination_ip": "10.0.0.200",
+    "alert_type": "Antivirus Detection",
+    "description": "Trojan.GenericKD detected in user downloads folder, quarantine failed",
+    "user_account": "mary.jones",
+    "hostname": "laptop-finance-03",
+    "log_source": "Endpoint AV"
+  },
+  {
+    "alert_id": "ALT-006",
+    "timestamp": "2025-05-24T10:44:02Z",
+    "source_ip": "10.0.0.12",
+    "destination_ip": "10.0.0.50",
+    "alert_type": "Port Scan",
+    "description": "Internal host scanned 1200 ports on domain controller in under 2 minutes",
+    "user_account": "N/A",
+    "hostname": "test-vm-01",
+    "log_source": "IDS"
+  }
+]
