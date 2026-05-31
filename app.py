@@ -1,7 +1,9 @@
 import streamlit as st
 import json
 import time
+import pandas as pd
 from triage import triage_alert
+from report import generate_pdf_report
 
 st.set_page_config(
     page_title="SOC Triage AI",
@@ -13,7 +15,6 @@ st.set_page_config(
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@300;400;500;600&display=swap');
-
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background-color: #020B18;
@@ -117,7 +118,6 @@ code {
 </style>
 """, unsafe_allow_html=True)
 
-# --- Header ---
 st.markdown("""
 <div style="
     background: linear-gradient(135deg, #030F1E 0%, #041525 50%, #030F1E 100%);
@@ -131,43 +131,16 @@ st.markdown("""
     <div style="position:absolute;top:0;left:0;right:0;height:2px;
     background:linear-gradient(90deg,transparent,#1A6BAA,#00B4D8,#1A6BAA,transparent);"></div>
     <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
-        <div style="
-            font-family:'JetBrains Mono',monospace;
-            font-size:2rem;
-            color:#1A6BAA;
-            line-height:1;
-        ">[SOC]</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:2rem;color:#1A6BAA;line-height:1;">[SOC]</div>
         <div style="flex:1;">
-            <div style="
-                font-family:'JetBrains Mono',monospace;
-                font-size:1.4rem;
-                font-weight:500;
-                color:#E2E8F0;
-                letter-spacing:0.04em;
-                line-height:1.3;
-            ">SOC Alert Triage Assistant</div>
-            <div style="
-                font-family:'Inter',sans-serif;
-                font-size:13px;
-                color:#475569;
-                margin-top:4px;
-            ">AI-powered first-pass security alert analysis &middot; Llama 3.3 70B via Groq</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:1.4rem;font-weight:500;color:#E2E8F0;letter-spacing:0.04em;">SOC Alert Triage Assistant</div>
+            <div style="font-family:'Inter',sans-serif;font-size:13px;color:#475569;margin-top:4px;">AI-powered first-pass security alert analysis &middot; Llama 3.3 70B via Groq</div>
         </div>
-        <div style="
-            font-family:'JetBrains Mono',monospace;
-            font-size:11px;
-            color:#22C55E;
-            background:rgba(34,197,94,0.08);
-            border:1px solid rgba(34,197,94,0.25);
-            border-radius:6px;
-            padding:6px 14px;
-            letter-spacing:0.06em;
-        ">[ ONLINE ]</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#22C55E;background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:6px 14px;letter-spacing:0.06em;">[ ONLINE ]</div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- Severity Config ---
 SEVERITY_CONFIG = {
     "CRITICAL": {"color": "#F87171", "bg": "rgba(248,113,113,0.07)"},
     "HIGH":     {"color": "#FB923C", "bg": "rgba(251,146,60,0.07)"},
@@ -177,7 +150,6 @@ SEVERITY_CONFIG = {
     "ERROR":    {"color": "#64748B", "bg": "rgba(100,116,139,0.07)"},
 }
 
-# --- Sidebar ---
 with st.sidebar:
     st.markdown("""
     <div style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
@@ -187,7 +159,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    uploaded_file = st.file_uploader("Upload alerts JSON", type=["json"])
+    uploaded_file = st.file_uploader("Upload alerts (JSON or CSV)", type=["json", "csv"])
 
     st.markdown("""
     <div style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
@@ -195,16 +167,9 @@ with st.sidebar:
     margin-top:1.5rem;margin-bottom:0.6rem;">
     Expected Format
     </div>
-    <div style="
-        background:#041525;
-        border:1px solid #0D2137;
-        border-radius:6px;
-        padding:0.85rem 1rem;
-        font-family:'JetBrains Mono',monospace;
-        font-size:12px;
-        line-height:1.8;
-        color:#475569;
-    ">
+    <div style="background:#041525;border:1px solid #0D2137;border-radius:6px;
+    padding:0.85rem 1rem;font-family:'JetBrains Mono',monospace;font-size:12px;
+    line-height:1.8;color:#475569;">
     <span style="color:#475569">{</span><br>
     &nbsp;&nbsp;<span style="color:#7DD3FC">"alert_id"</span>: <span style="color:#86EFAC">"ALT-001"</span>,<br>
     &nbsp;&nbsp;<span style="color:#7DD3FC">"alert_type"</span>: <span style="color:#86EFAC">"Brute Force"</span>,<br>
@@ -215,21 +180,17 @@ with st.sidebar:
     </div>
     <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #0D2137;
     font-family:'JetBrains Mono',monospace;font-size:10px;color:#1E3A5F;text-align:center;">
-    soc-triage-ai v1.0.0
+    soc-triage-ai v1.1.0
     </div>
     """, unsafe_allow_html=True)
 
-# --- Main Logic ---
 if uploaded_file is None:
     st.markdown("""
     <div style="background:#041525;border:1px dashed #1A3A5C;border-radius:10px;
     padding:2.5rem;text-align:center;margin-bottom:1.5rem;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;
-        color:#1A3A5C;margin-bottom:0.75rem;">[  ]</div>
-        <div style="font-family:'Inter',sans-serif;font-weight:500;
-        color:#CBD5E1;font-size:15px;margin-bottom:6px;">Awaiting Alert Data</div>
-        <div style="color:#475569;font-size:13px;">
-        Upload a JSON file from the sidebar, or run on the built-in sample alerts</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;color:#1A3A5C;margin-bottom:0.75rem;">[  ]</div>
+        <div style="font-family:'Inter',sans-serif;font-weight:500;color:#CBD5E1;font-size:15px;margin-bottom:6px;">Awaiting Alert Data</div>
+        <div style="color:#475569;font-size:13px;">Upload a JSON or CSV file, or run on the built-in sample alerts</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -241,7 +202,12 @@ if uploaded_file is None:
         st.rerun()
 
 else:
-    alerts = json.load(uploaded_file)
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
+        alerts = df.to_dict(orient="records")
+    else:
+        alerts = json.load(uploaded_file)
+
     st.session_state["alerts"] = alerts
     st.markdown(f"""
     <div style="background:rgba(34,197,94,0.05);border:1px solid rgba(34,197,94,0.2);
@@ -255,7 +221,6 @@ else:
         st.session_state["run_triage"] = True
         st.rerun()
 
-# --- Triage Engine ---
 if st.session_state.get("run_triage"):
     alerts = st.session_state.get("alerts", [])
 
@@ -308,7 +273,6 @@ if st.session_state.get("run_triage"):
     st.session_state["run_triage"] = False
     st.rerun()
 
-# --- Results ---
 if st.session_state.get("results"):
     results = st.session_state["results"]
     severity_counts = {}
@@ -348,57 +312,40 @@ if st.session_state.get("results"):
             st.markdown(f"""
             <div style="background:{cfg['bg']};border-left:3px solid {cfg['color']};
             border-radius:0 8px 8px 0;padding:1.25rem 1.5rem;margin-bottom:0.5rem;">
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;
-                gap:1.5rem;margin-bottom:1.25rem;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem;margin-bottom:1.25rem;">
                     <div>
-                        <div style="font-size:11px;font-weight:600;color:#475569;
-                        text-transform:uppercase;letter-spacing:0.1em;
-                        font-family:'Inter',sans-serif;margin-bottom:5px;">Severity</div>
-                        <div style="color:{cfg['color']};font-size:14px;font-weight:600;
-                        font-family:'JetBrains Mono',monospace;">{sev}</div>
+                        <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-family:'Inter',sans-serif;margin-bottom:5px;">Severity</div>
+                        <div style="color:{cfg['color']};font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;">{sev}</div>
                     </div>
                     <div>
-                        <div style="font-size:11px;font-weight:600;color:#475569;
-                        text-transform:uppercase;letter-spacing:0.1em;
-                        font-family:'Inter',sans-serif;margin-bottom:5px;">Category</div>
+                        <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-family:'Inter',sans-serif;margin-bottom:5px;">Category</div>
                         <div style="color:#CBD5E1;font-size:14px;">{r.get('category','N/A')}</div>
                     </div>
                     <div>
-                        <div style="font-size:11px;font-weight:600;color:#475569;
-                        text-transform:uppercase;letter-spacing:0.1em;
-                        font-family:'Inter',sans-serif;margin-bottom:5px;">Confidence</div>
-                        <div style="color:#38BDF8;font-size:14px;font-weight:600;
-                        font-family:'JetBrains Mono',monospace;">{r.get('confidence','N/A')}%</div>
+                        <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;font-family:'Inter',sans-serif;margin-bottom:5px;">Confidence</div>
+                        <div style="color:#38BDF8;font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;">{r.get('confidence','N/A')}%</div>
                     </div>
                 </div>
                 <div style="margin-bottom:1rem;">
-                    <div style="font-size:11px;font-weight:600;color:#475569;
-                    text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px;">Hostname</div>
-                    <code style="font-size:13px;padding:2px 8px;border-radius:4px;">
-                    {r.get('hostname','N/A')}</code>
+                    <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:5px;">Hostname</div>
+                    <code style="font-size:13px;padding:2px 8px;border-radius:4px;">{r.get('hostname','N/A')}</code>
                 </div>
                 <div style="margin-bottom:1rem;">
-                    <div style="font-size:11px;font-weight:600;color:#475569;
-                    text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Analysis</div>
-                    <div style="color:#CBD5E1;font-size:14px;line-height:1.65;">
-                    {r.get('summary','N/A')}</div>
+                    <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Analysis</div>
+                    <div style="color:#CBD5E1;font-size:14px;line-height:1.65;">{r.get('summary','N/A')}</div>
                 </div>
                 <div>
-                    <div style="font-size:11px;font-weight:600;color:#475569;
-                    text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">
-                    Recommended Action</div>
-                    <div style="color:#7DD3FC;font-size:14px;line-height:1.65;">
-                    &gt; {r.get('recommended_action','N/A')}</div>
+                    <div style="font-size:11px;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">Recommended Action</div>
+                    <div style="color:#7DD3FC;font-size:14px;line-height:1.65;">&gt; {r.get('recommended_action','N/A')}</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
             if str(r.get("is_false_positive","")).lower() == "true":
                 st.markdown(f"""
-                <div style="background:rgba(251,191,36,0.05);
-                border:1px solid rgba(251,191,36,0.2);
-                border-radius:6px;padding:0.75rem 1.25rem;font-size:13px;
-                color:#FBBF24;font-family:'Inter',sans-serif;">
+                <div style="background:rgba(251,191,36,0.05);border:1px solid rgba(251,191,36,0.2);
+                border-radius:6px;padding:0.75rem 1.25rem;font-size:13px;color:#FBBF24;
+                font-family:'Inter',sans-serif;">
                 [WARNING] Possible False Positive -- {r.get('false_positive_reason','N/A')}
                 </div>
                 """, unsafe_allow_html=True)
@@ -408,7 +355,7 @@ if st.session_state.get("results"):
     st.markdown("""
     <div style="font-family:'Inter',sans-serif;font-size:11px;font-weight:600;
     color:#475569;letter-spacing:0.12em;text-transform:uppercase;margin-bottom:0.75rem;">
-    Export
+    Export Report
     </div>
     """, unsafe_allow_html=True)
 
@@ -421,7 +368,9 @@ if st.session_state.get("results"):
         report_lines.append(f"- **Analysis:** {r.get('summary')}")
         report_lines.append(f"- **Action:** {r.get('recommended_action')}\n")
 
-    col1, col2 = st.columns(2)
+    pdf_bytes = generate_pdf_report(results)
+
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.download_button(
             label="Download Report (.md)",
@@ -430,6 +379,13 @@ if st.session_state.get("results"):
             mime="text/markdown"
         )
     with col2:
+        st.download_button(
+            label="Download Report (.pdf)",
+            data=pdf_bytes,
+            file_name="soc_triage_report.pdf",
+            mime="application/pdf"
+        )
+    with col3:
         if st.button("Clear & Reset"):
             st.session_state.clear()
             st.rerun()
