@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import time
 import pandas as pd
+from datetime import datetime
 from triage import triage_alert
 from report import generate_pdf_report
 
@@ -180,17 +181,21 @@ with st.sidebar:
     </div>
     <div style="margin-top:2rem;padding-top:1rem;border-top:1px solid #0D2137;
     font-family:'JetBrains Mono',monospace;font-size:10px;color:#1E3A5F;text-align:center;">
-    soc-triage-ai v1.1.0
+    soc-triage-ai v1.2.0
     </div>
     """, unsafe_allow_html=True)
 
+# --- Main Logic ---
 if uploaded_file is None:
     st.markdown("""
     <div style="background:#041525;border:1px dashed #1A3A5C;border-radius:10px;
     padding:2.5rem;text-align:center;margin-bottom:1.5rem;">
-        <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;color:#1A3A5C;margin-bottom:0.75rem;">[  ]</div>
-        <div style="font-family:'Inter',sans-serif;font-weight:500;color:#CBD5E1;font-size:15px;margin-bottom:6px;">Awaiting Alert Data</div>
-        <div style="color:#475569;font-size:13px;">Upload a JSON or CSV file, or run on the built-in sample alerts</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:1.5rem;
+        color:#1A3A5C;margin-bottom:0.75rem;">[  ]</div>
+        <div style="font-family:'Inter',sans-serif;font-weight:500;
+        color:#CBD5E1;font-size:15px;margin-bottom:6px;">Awaiting Alert Data</div>
+        <div style="color:#475569;font-size:13px;">
+        Upload a JSON or CSV file, or run on the built-in sample alerts</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -221,6 +226,7 @@ else:
         st.session_state["run_triage"] = True
         st.rerun()
 
+# --- Triage Engine ---
 if st.session_state.get("run_triage"):
     alerts = st.session_state.get("alerts", [])
 
@@ -273,6 +279,7 @@ if st.session_state.get("run_triage"):
     st.session_state["run_triage"] = False
     st.rerun()
 
+# --- Results ---
 if st.session_state.get("results"):
     results = st.session_state["results"]
     severity_counts = {}
@@ -304,7 +311,24 @@ if st.session_state.get("results"):
     </div>
     """, unsafe_allow_html=True)
 
-    for r in results:
+    all_severities = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "ERROR"]
+    selected = st.selectbox(
+        "Filter by severity",
+        all_severities,
+        index=0,
+        label_visibility="collapsed"
+    )
+
+    filtered = results if selected == "ALL" else [r for r in results if r.get("severity") == selected]
+
+    st.markdown(f"""
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#475569;
+    margin-bottom:0.75rem;letter-spacing:0.04em;">
+    Showing {len(filtered)} of {len(results)} alerts
+    </div>
+    """, unsafe_allow_html=True)
+
+    for r in filtered:
         sev = r.get("severity", "ERROR")
         cfg = SEVERITY_CONFIG.get(sev, SEVERITY_CONFIG["ERROR"])
 
@@ -359,7 +383,12 @@ if st.session_state.get("results"):
     </div>
     """, unsafe_allow_html=True)
 
-    report_lines = ["# SOC Triage Report\n", f"**Total Alerts Analyzed:** {len(results)}\n"]
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    report_lines = [
+        "# SOC Triage Report\n",
+        f"**Generated:** {timestamp}",
+        f"**Total Alerts Analyzed:** {len(results)}\n"
+    ]
     for r in results:
         report_lines.append(f"## [{r.get('severity')}] {r.get('alert_id')} - {r.get('original_type')}")
         report_lines.append(f"- **Host:** {r.get('hostname')}")
